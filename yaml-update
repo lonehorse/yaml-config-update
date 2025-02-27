@@ -1,0 +1,108 @@
+import os
+import yaml
+
+def prompt_configurations():
+    """
+    Prompt the user for the new OpenTelemetry configuration options.
+    Returns a dictionary with keys for layer ARNs, environment variables,
+    and a telemetry level selection.
+    """
+    new_config = {}
+
+    # Prompt for regions and their OpenTelemetry layer ARNs
+    layer_arns = {}
+    try:
+        num_regions = int(input("Enter the number of regions to update with OpenTelemetry layer ARNs: ").strip())
+    except ValueError:
+        print("Invalid number; defaulting to 0.")
+        num_regions = 0
+
+    for i in range(num_regions):
+        region = input(f"Enter region name ({i+1}/{num_regions}): ").strip()
+        arn = input(f"Enter the OpenTelemetry layer ARN for region '{region}': ").strip()
+        layer_arns[region] = arn
+    new_config['layer_arns'] = layer_arns
+
+    # Prompt for environment variables
+    env_vars = {}
+    try:
+        num_vars = int(input("Enter the number of environment variables to add: ").strip())
+    except ValueError:
+        print("Invalid number; defaulting to 0.")
+        num_vars = 0
+
+    for i in range(num_vars):
+        key = input(f"Enter environment variable key ({i+1}/{num_vars}): ").strip()
+        value = input(f"Enter environment variable value for '{key}': ").strip()
+        env_vars[key] = value
+    new_config['environment_variables'] = env_vars
+
+    # Example case-type configuration: telemetry level selection
+    telemetry_input = input("Select telemetry level (low/medium/high): ").strip().lower()
+    if telemetry_input == "low":
+        telemetry_level = "basic"
+    elif telemetry_input == "medium":
+        telemetry_level = "standard"
+    elif telemetry_input == "high":
+        telemetry_level = "detailed"
+    else:
+        telemetry_level = "default"
+    new_config['telemetry'] = telemetry_level
+
+    return new_config
+
+def update_yaml(file_path, new_config):
+    """
+    Load the YAML file, update or create the 'environments' section by inserting the new configurations,
+    then write the YAML back.
+    """
+    with open(file_path, 'r') as f:
+        data = yaml.safe_load(f) or {}
+
+    # Ensure the top-level 'environments' exists
+    if 'environments' not in data:
+        print("No 'environments' section found; creating one.")
+        data['environments'] = {}
+    env = data['environments']
+
+    # Update or create the 'regions' sub-section and add/update layer ARNs.
+    if 'regions' not in env:
+        print("No 'regions' section under 'environments' found; creating one.")
+        env['regions'] = {}
+
+    for region, arn in new_config['layer_arns'].items():
+        # If the region already exists, update its layer_arns list
+        if region in env['regions']:
+            region_section = env['regions'][region]
+            if 'layer_arns' in region_section:
+                if arn not in region_section['layer_arns']:
+                    region_section['layer_arns'].append(arn)
+            else:
+                region_section['layer_arns'] = [arn]
+        else:
+            # Create new region entry with layer_arns list
+            env['regions'][region] = {'layer_arns': [arn]}
+
+    # Update or create the 'environment_variables' section.
+    if 'environment_variables' not in env:
+        env['environment_variables'] = {}
+    env['environment_variables'].update(new_config['environment_variables'])
+    # Also add the telemetry level as an environment variable (or handle as needed)
+    env['environment_variables']['telemetry_level'] = new_config['telemetry']
+
+    # Write the updated YAML back to the file.
+    with open(file_path, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False)
+    print("YAML file updated successfully!")
+
+def main():
+    file_path = input("Enter the full path to the YAML configuration file: ").strip()
+    if not os.path.exists(file_path):
+        print("The file does not exist. Please check the path and try again.")
+        return
+
+    new_config = prompt_configurations()
+    update_yaml(file_path, new_config)
+
+if __name__ == "__main__":
+    main()
